@@ -1,0 +1,87 @@
+1-Active Customers = DISTINCTCOUNT(FactSales[Customer ID]) 
+
+2-Churn Rate % = 
+VAR _CohortSize = 
+    CALCULATE(
+        [Active Customers],
+        REMOVEFILTERS(FactSales[Month Since First Transaction]),
+        FactSales[Month Since First Transaction] = 0
+    )
+VAR _Churned = _CohortSize - [Active Customers]
+RETURN
+    IF(
+        NOT ISBLANK([Active Customers]),
+        DIVIDE(_Churned, _CohortSize)
+    )
+
+3-Lost Customers = 
+VAR _CurrentMonth = MIN(DimDate[Start of Month])
+VAR _PrevMonth = EDATE(_CurrentMonth, -1)
+VAR _CustomersThisMonth = VALUES(FactSales[Customer ID])
+VAR _CustomersLastMonth = 
+    CALCULATETABLE(
+        VALUES(FactSales[Customer ID]),
+        FILTER(
+            ALL(DimDate),
+            DimDate[Start of Month] = _PrevMonth
+        )
+    )
+RETURN
+    IF(
+        NOT ISEMPTY(_CustomersLastMonth),
+        COUNTROWS(
+            EXCEPT(_CustomersLastMonth, _CustomersThisMonth)
+        )
+    )
+
+4-New Customers = CALCULATE([Active Customers],FactSales[Month Since First Transaction]=0)
+
+5-Recovered Customers = 
+VAR _CurrentMonth = MIN(DimDate[Start of Month])
+VAR _PrevMonth = EDATE(_CurrentMonth, -1)
+VAR _CustomersThisMonth = VALUES(FactSales[Customer ID])
+VAR _CustomersLastMonth = 
+    CALCULATETABLE(
+        VALUES(FactSales[Customer ID]),
+        FILTER(
+            ALL(DimDate),
+            DimDate[Start of Month] = _PrevMonth
+        )
+    )
+VAR _CustomersBeforeLastMonth = 
+    CALCULATETABLE(
+        VALUES(FactSales[Customer ID]),
+        FILTER(
+            ALL(DimDate),
+            DimDate[Start of Month] < _PrevMonth
+        )
+    )
+VAR _InactiveLastMonth = EXCEPT(_CustomersBeforeLastMonth, _CustomersLastMonth)
+RETURN
+    COUNTROWS(
+        INTERSECT(_CustomersThisMonth, _InactiveLastMonth)
+    )
+
+6-Retention Rate = DIVIDE(
+                    [Active Customers],
+                    CALCULATE(
+                        [New Customers],
+                        REMOVEFILTERS(FactSales[Month Since First Transaction])
+                    )
+)
+
+7-Returning Customers = 
+VAR _CurrentMonth = MIN(DimDate[Start of Month])
+VAR _CustomersThisMonth = VALUES(FactSales[Customer ID])
+VAR _PriorCustomers = 
+    CALCULATETABLE(
+        VALUES(FactSales[Customer ID]),
+        FILTER(
+            ALL(DimDate),
+            DimDate[Start of Month] < _CurrentMonth
+        )
+    )
+RETURN
+    COUNTROWS(
+        INTERSECT(_CustomersThisMonth, _PriorCustomers)
+    )
